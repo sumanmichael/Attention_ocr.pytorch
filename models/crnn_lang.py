@@ -5,8 +5,12 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn.parameter import Parameter
 
+from functools import reduce
+from operator import __add__
+
 GO = 0
-EOS_TOKEN = 1              # End sign label
+EOS_TOKEN = 1  # End sign label
+
 
 class BidirectionalLSTM(nn.Module):
 
@@ -25,15 +29,15 @@ class BidirectionalLSTM(nn.Module):
         output = output.view(T, b, -1)
 
         return output
-   
+
 
 class AttentionCell(nn.Module):
     def __init__(self, input_size, hidden_size, num_embeddings=128):
         super(AttentionCell, self).__init__()
-        self.i2h = nn.Linear(input_size, hidden_size,bias=False)
+        self.i2h = nn.Linear(input_size, hidden_size, bias=False)
         self.h2h = nn.Linear(hidden_size, hidden_size)
         self.score = nn.Linear(hidden_size, 1, bias=False)
-        self.rnn = nn.GRUCell(input_size+num_embeddings, hidden_size)
+        self.rnn = nn.GRUCell(input_size + num_embeddings, hidden_size)
         self.hidden_size = hidden_size
         self.input_size = input_size
         self.num_embeddings = num_embeddings
@@ -46,19 +50,22 @@ class AttentionCell(nn.Module):
         hidden_size = self.hidden_size
         input_size = self.input_size
 
-        feats_proj = self.i2h(feats.view(-1,nC))
-        prev_hidden_proj = self.h2h(prev_hidden).view(1,nB, hidden_size).expand(nT, nB, hidden_size).contiguous().view(-1, hidden_size)
-        emition = self.score(torch.tanh(feats_proj + prev_hidden_proj).view(-1, hidden_size)).view(nT,nB).transpose(0,1)
+        feats_proj = self.i2h(feats.view(-1, nC))
+        prev_hidden_proj = self.h2h(prev_hidden).view(1, nB, hidden_size).expand(nT, nB, hidden_size).contiguous().view(
+            -1, hidden_size)
+        emition = self.score(torch.tanh(feats_proj + prev_hidden_proj).view(-1, hidden_size)).view(nT, nB).transpose(0,
+                                                                                                                     1)
         self.processed_batches = self.processed_batches + 1
 
         if self.processed_batches % 10000 == 0:
-            print('processed_batches = %d' %(self.processed_batches))
+            print('processed_batches = %d' % (self.processed_batches))
 
-        alpha = F.softmax(emition) # nB * nT
+        alpha = F.softmax(emition)  # nB * nT
         if self.processed_batches % 10000 == 0:
             print('emition ', list(emition.data[0]))
             print('alpha ', list(alpha.data[0]))
-        context = (feats * alpha.transpose(0,1).contiguous().view(nT,nB,1).expand(nT, nB, nC)).sum(0).squeeze(0) # nB * nC//I don’t feel it should be sum, and output 4×256
+        context = (feats * alpha.transpose(0, 1).contiguous().view(nT, nB, 1).expand(nT, nB, nC)).sum(0).squeeze(
+            0)  # nB * nC//I don’t feel it should be sum, and output 4×256
         context = torch.cat([context, cur_embeddings], 1)
         cur_hidden = self.rnn(context, prev_hidden)
         return cur_hidden, alpha
@@ -68,6 +75,7 @@ class DecoderRNN(nn.Module):
     """
         采用RNN进行解码
     """
+
     def __init__(self, hidden_size, output_size):
         super(DecoderRNN, self).__init__()
         self.hidden_size = hidden_size
@@ -94,6 +102,7 @@ class Attentiondecoder(nn.Module):
     """
         Use the attention mechanism to decode
     """
+
     def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=71):
         super(Attentiondecoder, self).__init__()
         self.hidden_size = hidden_size
@@ -139,7 +148,7 @@ def target_txt_decode(batch_size, text_length, text):
     return:
         targets: num_steps+1 * batch_size
     '''
-    nB = batch_size      # batch
+    nB = batch_size  # batch
 
     # Separate text
     num_steps = text_length.data.max()
@@ -154,7 +163,19 @@ def target_txt_decode(batch_size, text_length, text):
         start_id = start_id+text_length.data[i]                 # Split the target label of each target into: batch×numel of the longest character
     targets = Variable(targets.transpose(0, 1).contiguous())
     return targets
-    
+
+
+class Conv2dSamePadding(nn.Conv2d):
+    def __init__(self, *args, **kwargs):
+        super(Conv2dSamePadding, self).__init__(*args, **kwargs)
+        self._zero_pad_2d = nn.ZeroPad2d(reduce(__add__,
+                                               [(k // 2 + (k - 2 * (k // 2)) - 1, k // 2) for k in
+                                                self.kernel_size[::-1]]))
+
+    def forward(self, input):
+        input = self._zero_pad_2d(input)
+        return self._conv_forward(input, self.weight, self.bias)
+
 
 class CNN(nn.Module):
     '''
@@ -163,22 +184,32 @@ class CNN(nn.Module):
     def __init__(self, imgH, nc, nh):
         super(CNN, self).__init__()
         assert imgH % 16 == 0, 'imgH has to be a multiple of 16'
-
-        self.cnn = nn.Sequential(
-                      nn.Conv2d(nc, 64, 3, 1, 1), nn.ReLU(True), nn.MaxPool2d(2, 2), # 64x16x50
-                      nn.Conv2d(64, 128, 3, 1, 1), nn.ReLU(True), nn.MaxPool2d(2, 2), # 128x8x25
-                      nn.Conv2d(128, 256, 3, 1, 1), nn.BatchNorm2d(256), nn.ReLU(True), # 256x8x25
-                      nn.Conv2d(256, 256, 3, 1, 1), nn.ReLU(True), nn.MaxPool2d((2,2), (2,1), (0,1)), # 256x4x25
-                      nn.Conv2d(256, 512, 3, 1, 1), nn.BatchNorm2d(512), nn.ReLU(True), # 512x4x25
-                      nn.Conv2d(512, 512, 3, 1, 1), nn.ReLU(True), nn.MaxPool2d((2,2), (2,1), (0,1)), # 512x2x25
-                      nn.Conv2d(512, 512, 2, 1, 0), nn.BatchNorm2d(512), nn.ReLU(True)) # 512x1x25
+        #     TODO: Bias in Conv2D?
+        self.cnn = nn.Sequential(                                                   # 1x32x512
+            Conv2dSamePadding(nc, 64, 3, 1, 0), nn.ReLU(True), nn.MaxPool2d(2, 2),  # 64x32x256
+            Conv2dSamePadding(64, 128, 3, 1, 0), nn.ReLU(True), nn.MaxPool2d(2, 2),  # 128x8x128
+            Conv2dSamePadding(128, 256, 3, 1, 0), nn.BatchNorm2d(256), nn.ReLU(True),  # 256x8x128
+            Conv2dSamePadding(256, 256, 3, 1, 0), nn.ReLU(True), nn.MaxPool2d((2, 1), (2, 1)),  # 256x4x128
+            Conv2dSamePadding(256, 512, 3, 1, 0), nn.BatchNorm2d(512), nn.ReLU(True),  # 512x4x128
+            Conv2dSamePadding(512, 512, 3, 1, 0), nn.ReLU(True), nn.MaxPool2d((2, 1), (2, 1)),  # 512x2x128
+            Conv2dSamePadding(512, 512, 2, 1, 0), nn.BatchNorm2d(512), nn.ReLU(True), nn.MaxPool2d((2,1),(2,1)))  # 512x1x128
         self.rnn = nn.Sequential(
             BidirectionalLSTM(512, nh, nh),
             BidirectionalLSTM(nh, nh, nh))
 
     def forward(self, input):
         # conv features
-        conv = self.cnn(input)
+        # conv = self.cnn(input)
+
+
+        x = input
+        for layer in self.cnn:
+            # print(x.size(), layer)
+            x = layer(x)
+        conv = x
+        # print(conv.size())
+
+
         b, c, h, w = conv.size()
         assert h == 1, "the height of conv must be 1"
         conv = conv.squeeze(2)
@@ -186,7 +217,7 @@ class CNN(nn.Module):
 
         # rnn features calculate
         encoder_outputs = self.rnn(conv)          # seq * batch * n_classes// 25 × batchsize × 256（Number of hidden nodes）
-        
+
         return encoder_outputs
 
 
@@ -194,6 +225,7 @@ class decoder(nn.Module):
     '''
         decoder from image features
     '''
+
     def __init__(self, nh=256, nclass=13, dropout_p=0.1, max_length=71):
         super(decoder, self).__init__()
         self.hidden_size = nh
@@ -211,6 +243,7 @@ class AttentiondecoderV2(nn.Module):
     """
         Use seq to seq model to modify the calculation method of attention weight
     """
+
     def __init__(self, hidden_size, output_size, dropout_p=0.1):
         super(AttentiondecoderV2, self).__init__()
         self.hidden_size = hidden_size
@@ -227,29 +260,32 @@ class AttentiondecoderV2(nn.Module):
         self.vat = nn.Linear(hidden_size, 1)
 
     def forward(self, input, hidden, encoder_outputs):
-        embedded = self.embedding(input)         # Word embedding on the previous output
+        embedded = self.embedding(input)  # Word embedding on the previous output
         embedded = self.dropout(embedded)
 
         # test
         batch_size = encoder_outputs.shape[1]
-        alpha = hidden + encoder_outputs         # Feature fusion +/concat can actually be used
+        alpha = hidden + encoder_outputs  # Feature fusion +/concat can actually be used
         alpha = alpha.view(-1, alpha.shape[-1])
-        attn_weights = self.vat( torch.tanh(alpha))                       # Reduce encoder_output: batch*seq*features to reduce the dimension of features to 1
-        attn_weights = attn_weights.view(-1, 1, batch_size).permute((2,1,0))
+        attn_weights = self.vat(
+            torch.tanh(alpha))  # Reduce encoder_output: batch*seq*features to reduce the dimension of features to 1
+        attn_weights = attn_weights.view(-1, 1, batch_size).permute((2, 1, 0))
         attn_weights = F.softmax(attn_weights, dim=2)
 
         # attn_weights = F.softmax(
         #     self.attn(torch.cat((embedded, hidden[0]), 1)), dim=1)        # Find the weight of the last output and hidden state
 
         attn_applied = torch.matmul(attn_weights,
-                                 encoder_outputs.permute((1, 0, 2)))      # Matrix multiplication，bmm（8×1×56，8×56×256）=8×1×256
-        output = torch.cat((embedded, attn_applied.squeeze(1) ), 1)       # The last output and attention feature, make a linear + GRU
+                                    encoder_outputs.permute(
+                                        (1, 0, 2)))  # Matrix multiplication，bmm（8×1×56，8×56×256）=8×1×256
+        output = torch.cat((embedded, attn_applied.squeeze(1)),
+                           1)  # The last output and attention feature, make a linear + GRU
         output = self.attn_combine(output).unsqueeze(0)
 
         output = F.relu(output)
         output, hidden = self.gru(output, hidden)
 
-        output = F.log_softmax(self.out(output[0]), dim=1)          # Finally output a probability
+        output = F.log_softmax(self.out(output[0]), dim=1)  # Finally output a probability
         return output, hidden, attn_weights
 
     def initHidden(self, batch_size):

@@ -26,7 +26,7 @@ if __name__ == "__main__":
     parser.add_argument('--workers', type=int, help='number of data loading workers', default=2)
     parser.add_argument('--batchSize', type=int, default=4, help='input batch size')
     parser.add_argument('--imgH', type=int, default=32, help='the height of the input image to network')
-    parser.add_argument('--imgW', type=int, default=280, help='the width of the input image to network')
+    parser.add_argument('--imgW', type=int, default=512, help='the width of the input image to network')
     parser.add_argument('--nh', type=int, default=256, help='size of the lstm hidden state')
     parser.add_argument('--niter', type=int, default=21, help='number of epochs to train for')
     parser.add_argument('--lr', type=float, default=0.001, help='learning rate for Critic, default=0.00005')
@@ -45,7 +45,7 @@ if __name__ == "__main__":
     parser.add_argument('--random_sample', default=True, action='store_true',
                         help='whether to sample the dataset with random sampler')
     parser.add_argument('--teaching_forcing_prob', type=float, default=0.5, help='where to use teach forcing')
-    parser.add_argument('--max_width', type=int, default=71, help='the width of the featuremap out from cnn')
+    parser.add_argument('--max_width', type=int, default=128, help='the width of the featuremap out from cnn')
     opt = parser.parse_args()
 
     # override
