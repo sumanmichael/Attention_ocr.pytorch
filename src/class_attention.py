@@ -20,7 +20,7 @@ class attention_ocr():
         self.EOS_TOKEN = 1
         self.use_gpu = True
         self.max_width = 220
-        self.converter = utils.strLabelConverterForAttention(self.alphabet)
+        self.converter = utils.StrLabelConverterForAttention(self.alphabet)
         self.transform = transforms.ToTensor()
 
         nclass = len(self.alphabet) + 3

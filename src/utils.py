@@ -19,7 +19,7 @@ with open('./data/devanagari-charset.txt',encoding="utf-8") as f:
     alphabet = ''.join(alphabet)
 
 
-class strLabelConverterForAttention(object):
+class StrLabelConverterForAttention(object):
     """Convert between str and label.
 
     NOTE:
@@ -83,7 +83,7 @@ class strLabelConverterForAttention(object):
         texts = list(self.dict.keys())[list(self.dict.values()).index(t)]
         return texts
 
-class strLabelConverterForCTC(object):
+class StrLabelConverterForCTC(object):
     """Convert between str and label.
 
     NOTE:
@@ -162,7 +162,7 @@ class strLabelConverterForCTC(object):
             return texts
 
 
-class averager(object):
+class Averager(object):
     """Compute average for `torch.Variable` and `torch.Tensor`. """
 
     def __init__(self):
@@ -223,7 +223,7 @@ def assureRatio(img):
     return img
 
 
-class halo():
+class Halo():
     '''
     u: Mean value of Gaussian distribution
     sigma: variance

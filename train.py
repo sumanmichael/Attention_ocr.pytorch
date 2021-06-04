@@ -75,24 +75,24 @@ if __name__ == "__main__":
         print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
     transform = None
-    train_dataset = dataset.listDataset(list_file=opt.trainlist, transform=transform)
+    train_dataset = dataset.ListDataset(list_file=opt.trainlist, transform=transform)
     assert train_dataset
     if not opt.random_sample:
-        sampler = dataset.randomSequentialSampler(train_dataset, opt.batchSize)
+        sampler = dataset.RandomSequentialSampler(train_dataset, opt.batchSize)
     else:
         sampler = None
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batchSize,
         shuffle=False, sampler=sampler,
         num_workers=int(opt.workers),
-        collate_fn=dataset.alignCollate(imgH=opt.imgH, imgW=opt.imgW, keep_ratio=opt.keep_ratio))
+        collate_fn=dataset.AlignCollate(imgH=opt.imgH, imgW=opt.imgW, keep_ratio=opt.keep_ratio))
 
-    test_dataset = dataset.listDataset(list_file=opt.vallist, transform=dataset.resizeNormalize((opt.imgW, opt.imgH)))
+    test_dataset = dataset.ListDataset(list_file=opt.vallist, transform=dataset.ResizeNormalize((opt.imgW, opt.imgH)))
 
     nclass = len(alphabet) + 3  # When decoder, the number of categories required, 3 for SOS, EOS and blank
     nc = 1
 
-    converter = utils.strLabelConverterForAttention(alphabet)
+    converter = utils.StrLabelConverterForAttention(alphabet)
     # criterion = torch.nn.CrossEntropyLoss()
     criterion = torch.nn.NLLLoss()  # The final output should be log_softmax
 
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         criterion = criterion.cuda()
 
     # loss averager
-    loss_avg = utils.averager()
+    loss_avg = utils.Averager()
 
     # setup optimizer
     if opt.adam:
@@ -155,7 +155,7 @@ if __name__ == "__main__":
 
         n_correct = 0
         n_total = 0
-        loss_avg = utils.averager()
+        loss_avg = utils.Averager()
 
         max_iter = min(max_iter, len(data_loader))
         # max_iter = len(data_loader) - 1

@@ -12,7 +12,7 @@ from PIL import Image
 import numpy as np
 
 
-class listDataset(Dataset):
+class ListDataset(Dataset):
     def __init__(self, list_file=None, transform=None, target_transform=None):
         self.list_file = list_file
         with open(list_file, encoding="utf-8") as fp:
@@ -36,7 +36,7 @@ class listDataset(Dataset):
             else:
                 img = Image.open(imgpath).convert('L')
         except IOError:
-            print('Corrupted image for %d' % index)
+            print('Corrupted image for %d' % index, imgpath)
             return self[index + 1]
 
         if self.transform is not None:
@@ -49,7 +49,7 @@ class listDataset(Dataset):
 
         return (img, label)
 
-class resizeNormalize(object):
+class ResizeNormalize(object):
 
     def __init__(self, size, interpolation=Image.BILINEAR):
         self.size = size
@@ -63,7 +63,7 @@ class resizeNormalize(object):
         return img
 
 
-class randomSequentialSampler(sampler.Sampler):
+class RandomSequentialSampler(sampler.Sampler):
 
     def __init__(self, data_source, batch_size):
         self.num_samples = len(data_source)
@@ -89,7 +89,7 @@ class randomSequentialSampler(sampler.Sampler):
         return self.num_samples
 
 
-class alignCollate(object):
+class AlignCollate(object):
 
     def __init__(self, imgH=32, imgW=100, keep_ratio=False, min_ratio=1):
         self.imgH = imgH
@@ -112,7 +112,7 @@ class alignCollate(object):
             imgW = int(np.floor(max_ratio * imgH))
             imgW = max(imgH * self.min_ratio, imgW)  # assure imgH >= imgW
 
-        transform = resizeNormalize((imgW, imgH))
+        transform = ResizeNormalize((imgW, imgH))
         images = [transform(image) for image in images]
         images = torch.cat([t.unsqueeze(0) for t in images], 0)
 

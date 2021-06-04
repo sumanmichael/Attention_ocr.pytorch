@@ -37,9 +37,9 @@ if torch.cuda.is_available() and use_gpu:
     decoder = decoder.cuda()
 
 
-converter = utils.strLabelConverterForAttention(alphabet)
+converter = utils.StrLabelConverterForAttention(alphabet)
 
-transformer = dataset.resizeNormalize((280, 32))
+transformer = dataset.ResizeNormalize((280, 32))
 image = Image.open(img_path).convert('L')
 image = transformer(image)
 if torch.cuda.is_available() and use_gpu:
